@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '../../../services/api';
 
 export default function ConnectGitHub() {
     const [isLoading, setIsLoading] = useState(false);
@@ -15,21 +16,7 @@ export default function ConnectGitHub() {
         setStatusMessage('Connecting to GitHub...');
 
         try {
-            // In a production app, would call your API to initiate OAuth flow
-            const response = await fetch('http://localhost:5000/api/github/connect', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({}),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to connect to GitHub');
-            }
-
-            const data = await response.json();
+            const data = await api.connectGitHub();
 
             if (data.status === 'redirect') {
                 setStatusMessage('Redirecting to GitHub authorization page...');

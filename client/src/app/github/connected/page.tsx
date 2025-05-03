@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { api } from '../../../services/api';
 
 export default function GitHubConnected() {
     const [repositories, setRepositories] = useState([]);
@@ -24,13 +25,7 @@ export default function GitHubConnected() {
 
         const fetchRepositories = async () => {
             try {
-                const response = await fetch('http://localhost:5000/api/github/repositories', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                const data = await response.json();
+                const data = await api.getRepositories();
 
                 if (data.status === 'success') {
                     setRepositories(data.repositories);

@@ -10,8 +10,9 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
-CORS(app)
 
+CORS(app, origins=[os.environ.get('FRONTEND_URL', 'http://localhost:3000')])
+   
 app.register_blueprint(github_bp)
 app.register_blueprint(documentation_bp)
 app.register_blueprint(chat_bp)
