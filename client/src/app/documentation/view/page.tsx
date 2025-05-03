@@ -1,18 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/services/api';
 import Link from 'next/link';
 
-export default function ViewDocumentation() {
+function DocumentationContent() {
     const [documentation, setDocumentation] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [activeFile, setActiveFile] = useState<string | null>(null);
 
     const searchParams = useSearchParams();
-    const repoName = searchParams.get('repo');
+    const repoName = searchParams?.get('repo');
     const router = useRouter();
 
     useEffect(() => {
@@ -212,5 +212,17 @@ export default function ViewDocumentation() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function ViewDocumentation() {
+    return (
+        <Suspense fallback={
+            <div className="flex justify-center items-center min-h-[60vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        }>
+            <DocumentationContent />
+        </Suspense>
     );
 } 

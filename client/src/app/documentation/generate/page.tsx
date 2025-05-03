@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/services/api';
 
-export default function GenerateDocumentation() {
+function GenerateDocumentationContent() {
     const [repo, setRepo] = useState<any>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -12,17 +12,15 @@ export default function GenerateDocumentation() {
     const [isComplete, setIsComplete] = useState(false);
 
     const searchParams = useSearchParams();
-    const repoName = searchParams.get('repo');
+    const repoName = searchParams?.get('repo');
     const router = useRouter();
 
     useEffect(() => {
-        // Redirect if no repo specified
         if (!repoName) {
             router.push('/github/connected');
             return;
         }
 
-        // Get repository details
         const fetchRepository = async () => {
             try {
                 const data = await api.getRepository(repoName);
@@ -168,5 +166,17 @@ export default function GenerateDocumentation() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function GenerateDocumentation() {
+    return (
+        <Suspense fallback={
+            <div className="flex justify-center items-center min-h-[60vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        }>
+            <GenerateDocumentationContent />
+        </Suspense>
     );
 } 

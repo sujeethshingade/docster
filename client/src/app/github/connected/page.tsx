@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../../services/api';
 
-export default function GitHubConnected() {
+function GitHubConnectedContent() {
     const [repositories, setRepositories] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
     const searchParams = useSearchParams();
-    const token = searchParams.get('token');
+    const token = searchParams?.get('token');
     const router = useRouter();
 
     useEffect(() => {
@@ -101,5 +101,17 @@ export default function GitHubConnected() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function GitHubConnected() {
+    return (
+        <Suspense fallback={
+            <div className="flex justify-center items-center min-h-[60vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        }>
+            <GitHubConnectedContent />
+        </Suspense>
     );
 } 

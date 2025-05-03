@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/services/api';
 import Link from 'next/link';
@@ -12,7 +12,7 @@ interface Message {
     timestamp: string;
 }
 
-export default function ChatPage() {
+function ChatContent() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -287,5 +287,17 @@ export default function ChatPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function ChatPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex justify-center items-center min-h-screen">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        }>
+            <ChatContent />
+        </Suspense>
     );
 } 
