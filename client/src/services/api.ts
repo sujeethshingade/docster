@@ -70,7 +70,34 @@ export const api = {
 
   exportDocumentation: async (repoName: string, format: 'pdf' | 'docx') => {
     const token = getAuthToken();
-    window.location.href = `${API_URL}/documentation/export?repo_name=${encodeURIComponent(repoName)}&format=${format}&token=${token}`;
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `${API_URL}/documentation/export`;
+    form.target = '_blank';
+    
+    const repoInput = document.createElement('input');
+    repoInput.type = 'hidden';
+    repoInput.name = 'repo_name';
+    repoInput.value = repoName;
+    form.appendChild(repoInput);
+    
+    const formatInput = document.createElement('input');
+    formatInput.type = 'hidden';
+    formatInput.name = 'format';
+    formatInput.value = format;
+    form.appendChild(formatInput);
+    
+    const tokenInput = document.createElement('input');
+    tokenInput.type = 'hidden';
+    tokenInput.name = 'token';
+    tokenInput.value = token || '';
+    form.appendChild(tokenInput);
+    
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+    
     return { status: 'success' };
   },
 

@@ -128,13 +128,20 @@ def get_documentation(repo_name):
         }), 500
 
 
-@documentation_bp.route('/export', methods=['POST'])
+@documentation_bp.route('/export', methods=['GET', 'POST'])
 def export():
     """Export documentation to PDF or Word"""
     try:
-        data = request.json
-        repo_name = data.get('repo_name')
-        format_type = data.get('format', 'pdf').lower()
+        # Handle both GET and POST methods
+        if request.method == 'POST':
+            data = request.form  # Use form data for POST
+            repo_name = data.get('repo_name')
+            format_type = data.get('format', 'pdf').lower()
+            token = data.get('token')
+        else:  # GET method
+            repo_name = request.args.get('repo_name')
+            format_type = request.args.get('format', 'pdf').lower()
+            token = request.args.get('token')
 
         if not repo_name:
             return jsonify({
@@ -147,6 +154,14 @@ def export():
                 'status': 'error',
                 'message': 'Unsupported format. Supported formats: pdf, docx'
             }), 400
+
+        # Use token if provided, otherwise use session token
+        if token:
+            github_service.access_token = token
+        else:
+            token = session.get('github_token')
+            if token:
+                github_service.access_token = token
 
         documentation = documentation_service.get_documentation(repo_name)
 

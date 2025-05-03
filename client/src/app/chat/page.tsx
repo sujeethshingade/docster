@@ -19,10 +19,11 @@ export default function ChatPage() {
     const [repositories, setRepositories] = useState<any[]>([]);
     const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(true);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const searchParams = useSearchParams();
-    const repoParam = searchParams.get('repo');
+    const repoParam = searchParams?.get('repo');
 
     // Fetch repositories on mount
     useEffect(() => {
@@ -51,6 +52,8 @@ export default function ChatPage() {
             } catch (error) {
                 console.error('Error fetching repositories:', error);
                 setError('Failed to load repositories. Please make sure you are connected to GitHub.');
+            } finally {
+                setLoading(false);
             }
         };
 
@@ -127,6 +130,14 @@ export default function ChatPage() {
             },
         ]);
     };
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center min-h-screen">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-white min-h-screen">
@@ -248,28 +259,26 @@ export default function ChatPage() {
                                         type="text"
                                         value={input}
                                         onChange={e => setInput(e.target.value)}
+                                        placeholder={selectedRepo ? "Ask a question about your repository..." : "Select a repository first"}
                                         disabled={!selectedRepo || isLoading}
-                                        placeholder={
-                                            !selectedRepo
-                                                ? 'Select a repository first'
-                                                : isLoading
-                                                    ? 'Waiting for response...'
-                                                    : 'Ask a question about the codebase...'
-                                        }
-                                        className="flex-1 rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-500"
                                     />
                                     <button
                                         type="submit"
-                                        disabled={!selectedRepo || !input.trim() || isLoading}
-                                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                                        disabled={!selectedRepo || isLoading}
+                                        className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                     >
                                         {isLoading ? (
-                                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                        ) : null}
-                                        Send
+                                            <>
+                                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                Processing...
+                                            </>
+                                        ) : (
+                                            "Send"
+                                        )}
                                     </button>
                                 </div>
                             </form>
