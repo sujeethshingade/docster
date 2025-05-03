@@ -1,0 +1,8 @@
+/data
+/venv
+/__pycache__
+/routes/__pycache__
+/services/__pycache__
+/models/__pycache__
+/utils/__pycache__
+.env
