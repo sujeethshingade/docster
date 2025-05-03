@@ -71,34 +71,17 @@ export const api = {
   exportDocumentation: async (repoName: string, format: 'pdf' | 'docx') => {
     const token = getAuthToken();
     
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = `${API_URL}/documentation/export`;
-    form.target = '_blank';
-    
-    const repoInput = document.createElement('input');
-    repoInput.type = 'hidden';
-    repoInput.name = 'repo_name';
-    repoInput.value = repoName;
-    form.appendChild(repoInput);
-    
-    const formatInput = document.createElement('input');
-    formatInput.type = 'hidden';
-    formatInput.name = 'format';
-    formatInput.value = format;
-    form.appendChild(formatInput);
-    
-    const tokenInput = document.createElement('input');
-    tokenInput.type = 'hidden';
-    tokenInput.name = 'token';
-    tokenInput.value = token || '';
-    form.appendChild(tokenInput);
-    
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
-    
-    return { status: 'success' };
+    try {
+      if (typeof window !== 'undefined') {
+        window.open(`${API_URL}/documentation/export?repo_name=${encodeURIComponent(repoName)}&format=${format}&token=${token || ''}`, '_blank');
+        return { status: 'success' };
+      }
+      
+      return { status: 'error', message: 'Browser environment required for download' };
+    } catch (error) {
+      console.error('Download error:', error);
+      return { status: 'error', message: 'Failed to download file' };
+    }
   },
 
   queryChat: async (repoName: string, question: string) => {

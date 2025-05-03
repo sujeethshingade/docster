@@ -183,13 +183,22 @@ def export():
         output_path = export_service.export_documentation(
             markdown_content, format_type, temp_path)
 
-        # Return file for download
-        return send_file(
-            output_path,
-            as_attachment=True,
-            download_name=f"{repo_name.replace('/', '_')}_documentation.{format_type}",
-            mimetype='application/pdf' if format_type == 'pdf' else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        )
+        try:
+            # For Flask 2.0+
+            return send_file(
+                output_path,
+                as_attachment=True,
+                download_name=f"{repo_name.replace('/', '_')}_documentation.{format_type}",
+                mimetype='application/pdf' if format_type == 'pdf' else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
+        except TypeError:
+            # For older Flask versions
+            return send_file(
+                output_path,
+                as_attachment=True,
+                attachment_filename=f"{repo_name.replace('/', '_')}_documentation.{format_type}",
+                mimetype='application/pdf' if format_type == 'pdf' else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
     except Exception as e:
         return jsonify({
             'status': 'error',
