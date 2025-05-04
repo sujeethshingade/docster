@@ -195,11 +195,11 @@ function DocumentationContent() {
                     </div>
 
                     {/* Main content */}
-                    <div className="lg:w-1/2 mt-8 lg:mt-0">
+                    <div className="lg:w-1/2 mt-8 lg:mt-0 overflow-hidden">
                         {activeFileDoc ? (
                             <div>
                                 <h2 className="text-xl font-bold text-gray-900">{activeFileDoc.file_path}</h2>
-                                <div className="mt-4 prose prose-indigo prose-lg max-w-none">
+                                <div className="mt-4 prose prose-indigo prose-lg max-w-none break-words overflow-auto">
                                     <ReactMarkdown>
                                         {activeFileDoc.documentation}
                                     </ReactMarkdown>
