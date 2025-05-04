@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/services/api';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
 
 function DocumentationContent() {
     const [documentation, setDocumentation] = useState<any>(null);
@@ -130,7 +131,7 @@ function DocumentationContent() {
             <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
                 <div className="flex flex-col lg:flex-row">
                     {/* Sidebar */}
-                    <div className="lg:w-1/4 pr-8">
+                    <div className="lg:w-1/2 pr-8">
                         <div className="sticky top-8">
                             <div className="flex justify-between items-center">
                                 <h2 className="text-xl font-bold text-gray-900">{documentation.repository.name}</h2>
@@ -156,8 +157,10 @@ function DocumentationContent() {
 
                             <div className="mt-6">
                                 <h3 className="text-sm font-medium text-gray-900">Repository Summary</h3>
-                                <div className="mt-2 text-sm text-gray-600 whitespace-pre-line">
-                                    {documentation.repository.summary}
+                                <div className="mt-2 text-sm text-gray-600 prose prose-sm max-w-none">
+                                    <ReactMarkdown>
+                                        {documentation.repository.summary}
+                                    </ReactMarkdown>
                                 </div>
                             </div>
 
@@ -192,12 +195,14 @@ function DocumentationContent() {
                     </div>
 
                     {/* Main content */}
-                    <div className="lg:w-3/4 mt-8 lg:mt-0">
+                    <div className="lg:w-1/2 mt-8 lg:mt-0">
                         {activeFileDoc ? (
                             <div>
                                 <h2 className="text-xl font-bold text-gray-900">{activeFileDoc.file_path}</h2>
-                                <div className="mt-4 prose prose-indigo prose-lg text-gray-500 mx-auto whitespace-pre-line">
-                                    {activeFileDoc.documentation}
+                                <div className="mt-4 prose prose-indigo prose-lg max-w-none">
+                                    <ReactMarkdown>
+                                        {activeFileDoc.documentation}
+                                    </ReactMarkdown>
                                 </div>
                                 <p className="mt-6 text-sm text-gray-500">
                                     Generated: {new Date(activeFileDoc.generated_at).toLocaleString()}

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/services/api';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
     id: string;
@@ -223,7 +224,15 @@ function ChatContent() {
                                                         : 'bg-gray-200 text-gray-800'
                                                         }`}
                                                 >
-                                                    <div className="whitespace-pre-line">{message.content}</div>
+                                                    {message.role === 'user' ? (
+                                                        <div className="whitespace-pre-line">{message.content}</div>
+                                                    ) : (
+                                                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                                                            <ReactMarkdown>
+                                                                {message.content}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                    )}
                                                     <div
                                                         className={`text-xs mt-1 ${message.role === 'user' ? 'text-indigo-200' : 'text-gray-500'
                                                             }`}
