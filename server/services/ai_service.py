@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import json
 import google.generativeai as genai
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
@@ -12,9 +13,24 @@ class AIService:
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(__name__)
 
-        api_key = os.environ.get("GEMINI_API_KEY") or "your-gemini-api-key"
-        self.logger.debug(
-            f"Initializing AI service with API key: {'*' * (len(api_key) - 4) + api_key[-4:] if api_key else 'None'}")
+        api_key = self._get_api_key()
+
+        if api_key:
+            masked_key = f"{'*' * (len(api_key) - 4)}{api_key[-4:]}" if len(
+                api_key) > 4 else "****"
+            self.logger.debug(
+                f"Initializing AI service with API key: {masked_key}")
+        else:
+            self.logger.error(
+                "GEMINI_API_KEY not found in environment variables or config")
+            api_key = None
+
+        if not api_key:
+            self.logger.error(
+                "Unable to initialize Gemini service: Missing API key")
+            self.model = None
+            self.llm = None
+            return
 
         try:
             genai.configure(api_key=api_key)
@@ -26,14 +42,34 @@ class AIService:
                 "max_output_tokens": 2048,
             }
 
-            self.model = genai.GenerativeModel(
-                model_name="gemini-2.0-flash",
-                generation_config=self.generation_config
-            )
-            self.logger.debug("Gemini client initialized successfully")
+            model_names = ["gemini-2.0-flash", "gemini-1.5-flash"]
+            model_error = None
+
+            for model_name in model_names:
+                try:
+                    self.model = genai.GenerativeModel(
+                        model_name=model_name,
+                        generation_config=self.generation_config
+                    )
+                    test_response = self.model.generate_content("Test")
+                    self.logger.debug(f"Successfully initialized {model_name}")
+                    self.model_name = model_name
+                    break
+                except Exception as e:
+                    model_error = str(e)
+                    self.logger.warning(
+                        f"Could not initialize {model_name}: {str(e)}")
+                    continue
+
+            if not hasattr(self, 'model_name'):
+                raise Exception(
+                    f"Failed to initialize any Gemini model. Last error: {model_error}")
+
+            self.logger.debug(
+                f"Gemini client initialized successfully with model {self.model_name}")
 
             self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
+                model=self.model_name,
                 google_api_key=api_key,
                 temperature=0.1
             )
@@ -43,6 +79,23 @@ class AIService:
                 f"Error initializing AI services: {str(e)}", exc_info=True)
             self.model = None
             self.llm = None
+
+    def _get_api_key(self):
+        """Try multiple sources to get the API key"""
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if api_key:
+            return api_key
+
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if api_key:
+                return api_key
+        except Exception as e:
+            self.logger.warning(f"Error loading from .env: {str(e)}")
+
+        return None
 
     def _retry_api_call(self, func, max_retries=3, initial_delay=1):
         """Helper method to retry API calls with exponential backoff"""
@@ -65,8 +118,7 @@ class AIService:
     def analyze_code(self, code_snippet, file_path=None):
         """Analyze a code snippet and generate documentation for it"""
         if not self.model:
-            self.logger.error("Gemini model not initialized properly")
-            return "Error: AI service not available"
+            return "Error: AI service not available. Please check your GEMINI_API_KEY environment variable."
 
         self.logger.debug(f"Analyzing code for {file_path or 'unknown file'}")
 
@@ -105,8 +157,7 @@ class AIService:
     def analyze_commit(self, commit_message, diff):
         """Analyze a commit and generate documentation for the changes"""
         if not self.model:
-            self.logger.error("Gemini model not initialized properly")
-            return "Error: AI service not available"
+            return "Error: AI service not available. Please check your GEMINI_API_KEY environment variable."
 
         try:
             def api_call():
@@ -135,8 +186,7 @@ class AIService:
     def generate_repository_summary(self, repo_data):
         """Generate a high-level summary of the repository"""
         if not self.model:
-            self.logger.error("Gemini model not initialized properly")
-            return "Error: AI service not available"
+            return "Error: AI service not available. Please check your GEMINI_API_KEY environment variable."
 
         self.logger.debug(
             f"Generating summary for repository: {repo_data.get('name')}")
@@ -175,8 +225,7 @@ class AIService:
     def answer_question(self, question, context):
         """Answer a question about the codebase using the provided context"""
         if not self.model:
-            self.logger.error("Gemini model not initialized properly")
-            return "Error: AI service not available"
+            return "Error: AI service not available. Please check your GEMINI_API_KEY environment variable."
 
         try:
             # Define API call as a function for retry
