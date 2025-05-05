@@ -3,16 +3,18 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '../../../services/api';
+import { api, updateAuthState, notifyAuthChange } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 function GitHubConnectedContent() {
     const [repositories, setRepositories] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
-
     const searchParams = useSearchParams();
     const token = searchParams?.get('token');
+    const username = searchParams?.get('username');
     const router = useRouter();
+    const { checkAuthStatus } = useAuth();
 
     useEffect(() => {
         if (!token) {
@@ -20,8 +22,16 @@ function GitHubConnectedContent() {
             return;
         }
 
-        // Store token in localStorage for future API calls
         localStorage.setItem('github_token', token);
+        localStorage.setItem('user_authenticated', 'true');
+
+        if (username) {
+            localStorage.setItem('github_username', username);
+        }
+
+        updateAuthState(true);
+        checkAuthStatus();
+        notifyAuthChange();
 
         const fetchRepositories = async () => {
             try {
@@ -41,7 +51,16 @@ function GitHubConnectedContent() {
         };
 
         fetchRepositories();
-    }, [token, router]);
+
+        // Redirect to documentation after a short delay
+        const redirectTimeout = setTimeout(() => {
+            router.push('/documentation');
+        }, 3000);
+
+        return () => {
+            clearTimeout(redirectTimeout);
+        };
+    }, [token, username, router, checkAuthStatus]);
 
     return (
         <div className="bg-white py-24 sm:py-32">
@@ -60,8 +79,7 @@ function GitHubConnectedContent() {
                                     </svg>
                                 </div>
                                 <div className="ml-3">
-                                    <h3 className="text-sm font-medium text-red-800">Error</h3>
-                                    <div className="mt-2 text-sm text-red-700">
+                                    <div className="text-sm text-red-500">
                                         <p>{error}</p>
                                     </div>
                                 </div>
@@ -74,28 +92,9 @@ function GitHubConnectedContent() {
                             <p className="mt-6 text-lg leading-8 text-gray-600">
                                 Your GitHub account has been successfully connected. You can now generate documentation for your repositories.
                             </p>
-
-                            <div className="mt-10">
-                                <h3 className="text-xl font-semibold text-gray-900">Your Repositories</h3>
-                                <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                                    {repositories.map((repo: any) => (
-                                        <div key={repo.full_name} className="rounded-lg bg-white shadow">
-                                            <div className="p-6">
-                                                <h4 className="text-lg font-semibold text-gray-900">{repo.name}</h4>
-                                                <p className="mt-2 text-sm text-gray-600 line-clamp-2">{repo.description || 'No description'}</p>
-                                                <div className="mt-4 flex">
-                                                    <Link
-                                                        href={`/documentation/generate?repo=${repo.full_name}`}
-                                                        className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
-                                                    >
-                                                        Generate Documentation <span aria-hidden="true">→</span>
-                                                    </Link>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            <p className="mt-2 text-sm text-gray-500">
+                                You will be redirected to the documentation page in a few seconds...
+                            </p>
                         </>
                     )}
                 </div>

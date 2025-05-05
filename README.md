@@ -47,14 +47,14 @@ An AI-powered documentation tool that automates the generation, maintenance, and
 2. Navigate to Developer Settings > OAuth Apps
 3. Create a new OAuth App with:
    - Application name: Docster
-   - Homepage URL: http://localhost:3000
-   - Authorization callback URL: http://localhost:5000/api/github/callback
+   - Homepage URL: `http://localhost:3000`
+   - Authorization callback URL: `http://localhost:5000/api/github/callback`
 
 ### API Keys Setup
 
 Create a `.env` file in the `/server` directory with:
 
-```
+```text
 GEMINI_API_KEY=your-gemini-api-key
 GITHUB_CLIENT_ID=your-github-client-id
 GITHUB_CLIENT_SECRET=your-github-client-secret
@@ -74,7 +74,7 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at http://localhost:3000
+The frontend will be available at `http://localhost:3000`
 
 #### Server
 
@@ -86,4 +86,4 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The backend API will run at http://localhost:5000
+The backend API will run at `http://localhost:5000`

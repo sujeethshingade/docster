@@ -60,10 +60,64 @@ def callback():
 
         session['github_token'] = access_token
 
-        # Redirect to frontend
+        try:
+            github_service.access_token = access_token
+            github = github_service.github
+
+            if not github:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to initialize GitHub client'
+                }), 500
+
+            user = github.get_user()
+
+            username = user.login
+            name = user.name or username
+
+            try:
+                email = user.email
+                if not email:
+                    emails = user.get_emails()
+                    primary_emails = [
+                        e for e in emails if e.get('primary') is True]
+                    if primary_emails:
+                        email = primary_emails[0].get('email')
+                    else:
+                        email = f"{username}@users.noreply.github.com"
+            except Exception:
+                email = f"{username}@users.noreply.github.com"
+
+            user_id = user.id
+            avatar_url = user.avatar_url or ''
+
+            # Log successful user data retrieval
+            print(f"Successfully retrieved GitHub user: {username} ({email})")
+        except Exception as e:
+            print(f"Error getting GitHub user info: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Error retrieving user info: {str(e)}'
+            }), 500
+
+        user_data = {
+            'token': access_token,
+            'username': username,
+            'name': name,
+            'email': email,
+            'id': user_id,
+            'avatar_url': avatar_url
+        }
+
+        # Redirect to frontend with user data
         frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-        return redirect(f"{frontend_url}/github/connected?token={access_token}")
+        redirect_url = f"{frontend_url}/github/connected?token={access_token}&username={username}&email={email}&id={user_id}&avatar_url={avatar_url}"
+
+        print(f"Redirecting to: {redirect_url}")
+
+        return redirect(redirect_url)
     except Exception as e:
+        print(f"OAuth callback error: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -160,6 +214,64 @@ def get_repository(repo_name):
             }
         })
     except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@github_bp.route('/user', methods=['GET'])
+def get_user():
+    """Get current GitHub user info"""
+    try:
+        token = request.headers.get('Authorization')
+        if token and token.startswith('Bearer '):
+            token = token.split(' ')[1]
+        else:
+            token = session.get('github_token')
+
+        if not token:
+            return jsonify({
+                'status': 'error',
+                'message': 'Not authenticated'
+            }), 401
+
+        github_service.access_token = token
+
+        github = github_service.github
+        user = github.get_user()
+
+        return jsonify({
+            'status': 'success',
+            'user': {
+                'id': user.id,
+                'login': user.login,
+                'name': user.name,
+                'email': user.email,
+                'avatar_url': user.avatar_url,
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@github_bp.route('/logout', methods=['POST'])
+def logout():
+    """Log out from GitHub"""
+    try:
+        # Clear the GitHub token from session
+        if 'github_token' in session:
+            session.pop('github_token')
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Successfully logged out'
+        })
+    except Exception as e:
+        print(f"Logout error: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e)
