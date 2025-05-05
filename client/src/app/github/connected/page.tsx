@@ -24,7 +24,7 @@ function GitHubConnectedContent() {
 
         try {
             // Save token to localStorage with error handling
-            localStorage.removeItem('github_token'); 
+            localStorage.removeItem('github_token'); // Clear first to avoid stale tokens
             localStorage.setItem('github_token', token);
             console.log('GitHub token saved successfully');
 
@@ -36,6 +36,13 @@ function GitHubConnectedContent() {
                 localStorage.removeItem('github_username'); // Clear first
                 localStorage.setItem('github_username', username);
                 console.log('GitHub username saved successfully');
+            }
+
+            // Generate a consistent user ID for Supabase if not already present
+            if (!localStorage.getItem('supabase_user_id')) {
+                const anonymousId = crypto.randomUUID();
+                localStorage.setItem('supabase_user_id', anonymousId);
+                console.log('Created Supabase user ID:', anonymousId);
             }
 
             // Update global auth state

@@ -6,4 +6,3 @@
 /models/__pycache__
 /utils/__pycache__
 .env
-.env.production

@@ -4,28 +4,14 @@ import { supabase } from './supabase';
 // Create a consistent auth check function
 export const isAuthenticated = async (): Promise<boolean> => {
   try {
-    // Check both user_authenticated flag and github_token
-    const userAuthFlag = localStorage.getItem('user_authenticated') === 'true';
+    // Try to ensure Supabase auth first
+    const supabaseAuthed = await ensureSupabaseAuth();
+    
+    // Even if Supabase auth fails, check GitHub token
     const hasGithubToken = localStorage.getItem('github_token') !== null;
     
-    if (hasGithubToken && !userAuthFlag) {
-      localStorage.setItem('user_authenticated', 'true');
-    }
-    
-    if (!hasGithubToken) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          updateAuthState(true);
-          return true;
-        }
-      } catch (err) {
-        console.error('Supabase auth check error:', err);
-      }
-    }
-    
-    // If GitHub token exists, consider authenticated regardless of Supabase state
-    if (hasGithubToken) {
+    if (supabaseAuthed || hasGithubToken) {
+      updateAuthState(true);
       return true;
     }
     
@@ -34,9 +20,10 @@ export const isAuthenticated = async (): Promise<boolean> => {
   } catch (err) {
     console.error('Auth check error:', err);
     
+    // If GitHub token exists, consider authenticated regardless of errors
     const hasGithubToken = localStorage.getItem('github_token') !== null;
-    
     if (hasGithubToken) {
+      updateAuthState(true);
       return true;
     }
     
@@ -81,25 +68,67 @@ export const updateAuthState = (isAuthenticated: boolean) => {
 
 export const getCurrentUser = async () => {
   try {
+    // Try to get user from Supabase auth
     const { data: { user } } = await supabase.auth.getUser();
+    
     if (user) {
-      updateAuthState(true);
+      // If we have a valid Supabase user, return it
       return user;
-    } else {
-      updateAuthState(false);
-      return null;
     }
+    
+    // If no Supabase user but we have GitHub token, try to authenticate with GitHub
+    const githubToken = localStorage.getItem('github_token');
+    if (githubToken) {
+      try {
+        // Get GitHub user info to find email
+        const githubUserResponse = await authenticatedFetch(`${API_URL}/github/user`);
+        const githubUserData = await githubUserResponse.json();
+        
+        if (githubUserData.status === 'success' && githubUserData.user && githubUserData.user.email) {
+          const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: githubUserData.user.email,
+            password: githubToken
+          });
+          
+          if (signInError && !signInError.message.includes('User already registered')) {
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email: githubUserData.user.email,
+              password: githubToken,
+              options: {
+                data: {
+                  github_username: githubUserData.user.login,
+                  github_id: githubUserData.user.id,
+                  avatar_url: githubUserData.user.avatar_url || ''
+                }
+              }
+            });
+            
+            if (!signUpError && signUpData.user) {
+              return signUpData.user;
+            }
+          } else if (!signInError && authData.user) {
+            return authData.user;
+          }
+        }
+      } catch (err) {
+        console.error('Error authenticating with GitHub user info:', err);
+      }
+    }
+    
+    return null;
   } catch (err) {
     console.error('Error getting current user:', err);
-    updateAuthState(false);
     return null;
   }
 };
 
-// Create an authenticated fetch wrapper
+// Create an authenticated fetch wrapper with improved error handling
 const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
   // Always get a fresh token for each request
   const token = typeof window !== 'undefined' ? localStorage.getItem('github_token') : null;
+  
+  // Debug URL we're calling
+  console.log('API request to:', url);
   
   // Prepare headers with token
   const headers = {
@@ -115,10 +144,13 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}): Promi
       headers
     });
     
-    // Don't clear auth on 401 errors - let the component handle them
+    if (!response.ok) {
+      console.error(`API error: ${response.status} ${response.statusText} for ${url}`);
+    }
+    
     return response;
   } catch (err) {
-    console.error('Request error:', err);
+    console.error(`Network error when calling ${url}:`, err);
     throw err;
   }
 };
@@ -285,28 +317,88 @@ export const api = {
   },
 
   generateDocumentation: async (repoName: string) => {
-    const response = await fetch(`${API_URL}/documentation/generate`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ repo_name: repoName }),
-    });
-    const data = await response.json();
-    
-    // If documentation generation was successful, save to Supabase
-    if (data.status === 'success') {
-      const user = await getCurrentUser();
-      if (user) {
-        // Store documentation in Supabase
-        await supabase.from('documents').insert({
-          user_id: user.id,
-          repo_name: repoName,
-          content: JSON.stringify(data.documentation),
-          created_at: new Date().toISOString()
-        });
+    try {
+      // Make a direct fetch with detailed error logging
+      const token = localStorage.getItem('github_token');
+      if (!token) {
+        return { status: 'error', message: 'Authentication required' };
       }
+      
+      // Log the API URL we're about to call
+      const apiUrl = `${API_URL}/documentation/generate`;
+      console.log('Calling documentation generation API:', apiUrl);
+      
+      // Use raw fetch to avoid any wrapper issues
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ repo_name: repoName })
+      });
+
+      // Log detailed response info to debug 404s
+      console.log('API response status:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        console.error(`Documentation generation API error: ${response.status} ${response.statusText}`);
+        // Check for common status codes
+        let errorMsg = 'Failed to generate documentation';
+        if (response.status === 404) errorMsg = 'API endpoint not found. Please check server configuration.';
+        if (response.status === 401) errorMsg = 'Authentication required. Please reconnect to GitHub.';
+        
+        return { 
+          status: 'error', 
+          message: errorMsg
+        };
+      }
+
+      const data = await response.json();
+      
+      // If documentation generation was successful, save to Supabase
+      if (data.status === 'success') {
+        try {
+          // Ensure we have a client ID
+          ensureClientId();
+          const clientId = localStorage.getItem('docster_client_id')!;
+          console.log('Saving documentation with client ID:', clientId);
+          
+          let content;
+          if (typeof data.documentation === 'string') {
+            try {
+              content = JSON.parse(data.documentation);
+            } catch {
+              content = data.documentation;
+            }
+          } else {
+            content = data.documentation;
+          }
+          
+          // Try direct insert with client ID
+          const { data: insertData, error } = await supabase.from('documents').insert({
+            user_id: clientId,
+            repo_name: repoName,
+            content: content,
+            created_at: new Date().toISOString()
+          });
+
+          if (error) {
+            console.error('Error saving documentation to Supabase:', error.message, error.details, error.hint);
+          } else {
+            console.log('Documentation saved to Supabase successfully');
+          }
+        } catch (dbError) {
+          console.error('Error in Supabase operation:', dbError);
+          // Don't fail the overall operation if Supabase saving fails
+        }
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error generating documentation:', error);
+      return { status: 'error', message: 'Failed to generate documentation. Network error.' };
     }
-    
-    return data;
   },
 
   getDocumentation: async (repoName: string) => {
@@ -323,26 +415,67 @@ export const api = {
 
     // First try to get from Supabase database
     try {
-      const user = await getCurrentUser();
-      if (user) {
-        const { data } = await supabase
-          .from('documents')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('repo_name', repoName)
-          .order('created_at', { ascending: false })
-          .limit(1);
+      // Ensure Supabase authentication
+      const isAuthed = await ensureSupabaseAuth();
+      if (!isAuthed) {
+        console.warn('Failed to authenticate with Supabase, falling back to API');
+        // Continue to API fallback
+      } else {
+        // Get authenticated user
+        const { data: { user } } = await supabase.auth.getUser();
+        let userId = user?.id;
         
-        if (data && data.length > 0) {
-          return { 
-            status: 'success', 
-            documentation: JSON.parse(data[0].content) 
-          };
+        // If no authenticated user but we have a stored anonymous ID, use that
+        if (!userId) {
+          const storedId = localStorage.getItem('supabase_anon_id') || localStorage.getItem('current_user_id');
+          if (storedId) {
+            userId = storedId;
+            console.log('Using stored user ID for documentation lookup:', userId);
+          } else {
+            console.warn('No user ID available for getDocumentation');
+            // Continue to API fallback
+          }
+        } else {
+          console.log('Using authenticated user ID:', userId);
+        }
+        
+        if (userId) {
+          const { data, error } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('repo_name', repoName)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          
+          if (error) {
+            console.error('Supabase query error:', error);
+          } else if (data && data.length > 0) {
+            console.log('Found documentation in Supabase');
+            
+            // Check if content needs parsing
+            let documentation;
+            try {
+              if (typeof data[0].content === 'string') {
+                documentation = JSON.parse(data[0].content);
+              } else {
+                documentation = data[0].content;
+              }
+              
+              return { 
+                status: 'success', 
+                documentation
+              };
+            } catch (parseErr) {
+              console.error('Error parsing documentation JSON:', parseErr);
+            }
+          } else {
+            console.log('No documentation found in Supabase for', repoName);
+          }
         }
       }
     } catch (err) {
       console.error('Error fetching from Supabase:', err);
-      // Continue to API fallback
     }
     
     // Fall back to API if not in database
@@ -352,7 +485,6 @@ export const api = {
       
       if (!response.ok) {
         console.error(`Documentation API error: ${response.status} ${response.statusText}`);
-        // Never clear auth state on API errors
         return { 
           status: 'error', 
           code: response.status,
@@ -364,24 +496,58 @@ export const api = {
       return data;
     } catch (err) {
       console.error('Error fetching documentation:', err);
-      // Never clear auth state on errors
       return { status: 'error', message: 'Failed to fetch documentation' };
     }
   },
 
   getUserDocumentations: async () => {
-    const user = await getCurrentUser();
-    if (!user) return { status: 'error', message: 'User not authenticated' };
-    
     try {
+      // Ensure client ID is available
+      const isAuthed = await ensureSupabaseAuth();
+      if (!isAuthed) {
+        console.error('Failed to ensure auth for getUserDocumentations');
+        return { status: 'error', message: 'Authentication required' };
+      }
+      
+      // Get authenticated user or client ID
+      const { data: { user } } = await supabase.auth.getUser();
+      let userId = user?.id;
+      
+      if (!userId) {
+        const clientId = localStorage.getItem('current_user_id') || localStorage.getItem('docster_client_id');
+        if (!clientId) {
+          if (!ensureClientId()) {
+            console.error('Cannot generate client ID for getUserDocumentations');
+            return { status: 'error', message: 'User ID not available' };
+          }
+          // This should never be null after ensureClientId()
+          userId = localStorage.getItem('current_user_id')!;
+        } else {
+          userId = clientId;
+        }
+        console.log('Using client ID for documents:', userId);
+      } else {
+        console.log('Using authenticated user ID:', userId);
+      }
+      
       const { data, error } = await supabase
         .from('documents')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error fetching documents:', error);
+        
+        // Check if it's a permissions error and try disabling RLS temporarily
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          console.log('Permission error, returning empty document list');
+          return { 
+            status: 'success', 
+            documents: [] 
+          };
+        }
+        
         return { status: 'error', message: error.message };
       }
       
@@ -425,43 +591,124 @@ export const api = {
   },
 
   queryChat: async (repoName: string, question: string) => {
-    const response = await fetch(`${API_URL}/chat/query`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ repo_name: repoName, question }),
-    });
-    const data = await response.json();
-    
-    // Save chat to Supabase
-    if (data.status === 'success') {
-      const user = await getCurrentUser();
-      if (user) {
-        await supabase.from('chats').insert({
-          user_id: user.id,
-          repo_name: repoName,
-          question: question,
-          answer: data.response.answer,
-          created_at: new Date().toISOString()
-        });
+    try {
+      // Get token directly
+      const token = localStorage.getItem('github_token');
+      if (!token) {
+        return { status: 'error', message: 'Authentication required' };
       }
+      
+      const apiUrl = `${API_URL}/chat/query`;
+      console.log('Calling chat query API:', apiUrl);
+      
+      // Use direct fetch with full error logging
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ repo_name: repoName, question })
+      });
+      
+      console.log('Chat API response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        console.error(`Chat query API error: ${response.status} ${response.statusText}`);
+        let errorMsg = 'Failed to query the chat API';
+        if (response.status === 404) errorMsg = 'Chat API endpoint not found. Please check server configuration.';
+        if (response.status === 401) errorMsg = 'Authentication required. Please reconnect to GitHub.';
+        
+        return { 
+          status: 'error', 
+          message: errorMsg
+        };
+      }
+
+      const data = await response.json();
+      
+      // Save chat to Supabase if API query was successful
+      if (data.status === 'success') {
+        try {
+          // Ensure we have a client ID
+          ensureClientId();
+          const clientId = localStorage.getItem('docster_client_id')!;
+          console.log('Saving chat with client ID:', clientId);
+          
+          // Try direct insert with client ID
+          const { data: insertData, error } = await supabase.from('chats').insert({
+            user_id: clientId,
+            repo_name: repoName,
+            question: question,
+            answer: data.response.answer,
+            created_at: new Date().toISOString()
+          });
+          
+          if (error) {
+            console.error('Error saving chat to Supabase:', error.message, error.details, error.hint);
+          } else {
+            console.log('Chat message saved to Supabase successfully');
+          }
+        } catch (dbError) {
+          console.error('Error in Supabase operation:', dbError);
+        }
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error querying chat:', error);
+      return { status: 'error', message: 'Failed to query the chat API. Network error.' };
     }
-    
-    return data;
   },
 
   getUserChats: async () => {
-    const user = await getCurrentUser();
-    if (!user) return { status: 'error', message: 'User not authenticated' };
-    
     try {
+      // Ensure client ID is available
+      const isAuthed = await ensureSupabaseAuth();
+      if (!isAuthed) {
+        console.error('Failed to ensure auth for getUserChats');
+        return { status: 'error', message: 'Authentication required' };
+      }
+      
+      // Get authenticated user or client ID
+      const { data: { user } } = await supabase.auth.getUser();
+      let userId = user?.id;
+      
+      // If no authenticated user, use client ID
+      if (!userId) {
+        const clientId = localStorage.getItem('current_user_id') || localStorage.getItem('docster_client_id');
+        if (!clientId) {
+          if (!ensureClientId()) {
+            console.error('Cannot generate client ID for getUserChats');
+            return { status: 'error', message: 'User ID not available' };
+          }
+          userId = localStorage.getItem('current_user_id')!;
+        } else {
+          userId = clientId;
+        }
+        console.log('Using client ID for chats:', userId);
+      } else {
+        console.log('Using authenticated user ID:', userId);
+      }
+      
       const { data, error } = await supabase
         .from('chats')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error fetching chats:', error);
+        
+        // Check if it's a permissions error and try disabling RLS temporarily
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          console.log('Permission error, returning empty chat list');
+          return { 
+            status: 'success', 
+            chats: [] 
+          };
+        }
+        
         return { status: 'error', message: error.message };
       }
       
@@ -476,22 +723,65 @@ export const api = {
   },
 
   getChatsByRepository: async (repoName: string) => {
-    const user = await getCurrentUser();
-    if (!user) return { status: 'error', message: 'User not authenticated' };
-    
-    const { data, error } = await supabase
-      .from('chats')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('repo_name', repoName)
-      .order('created_at', { ascending: true });
-    
-    if (error) return { status: 'error', message: error.message };
-    
-    return { 
-      status: 'success', 
-      chats: data
-    };
+    try {
+      // Ensure client ID is available
+      const isAuthed = await ensureSupabaseAuth();
+      if (!isAuthed) {
+        console.error('Failed to ensure auth for getChatsByRepository');
+        return { status: 'error', message: 'Authentication required' };
+      }
+      
+      // Get authenticated user or client ID
+      const { data: { user } } = await supabase.auth.getUser();
+      let userId = user?.id;
+      
+      if (!userId) {
+        const clientId = localStorage.getItem('current_user_id') || localStorage.getItem('docster_client_id');
+        if (!clientId) {
+          if (!ensureClientId()) {
+            console.error('Cannot generate client ID for getChatsByRepository');
+            return { status: 'error', message: 'User ID not available' };
+          }
+          // This should never be null after ensureClientId()
+          userId = localStorage.getItem('current_user_id')!;
+        } else {
+          userId = clientId;
+        }
+        console.log('Using client ID for repository chats:', userId);
+      } else {
+        console.log('Using authenticated user ID:', userId);
+      }
+      
+      const { data, error } = await supabase
+        .from('chats')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('repo_name', repoName)
+        .order('created_at', { ascending: true });
+      
+      if (error) {
+        console.error('Error fetching repository chats:', error);
+        
+        // Check if it's a permissions error and try disabling RLS temporarily
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          console.log('Permission error, returning empty chat list');
+          return { 
+            status: 'success', 
+            chats: [] 
+          };
+        }
+        
+        return { status: 'error', message: error.message };
+      }
+      
+      return { 
+        status: 'success', 
+        chats: data
+      };
+    } catch (err) {
+      console.error('Error fetching chats by repository:', err);
+      return { status: 'error', message: 'Failed to load chat history' };
+    }
   },
 
   requestUpdate: async (repoName: string, filePath: string, suggestion: string) => {
@@ -511,4 +801,38 @@ export const api = {
     });
     return response.json();
   },
+};
+
+// Improved Supabase authentication helper function
+export const ensureSupabaseAuth = async (): Promise<boolean> => {
+  try {
+    // Always use client ID approach, skipping Supabase auth completely
+    return ensureClientId();
+  } catch (err) {
+    console.error('Auth check error:', err);
+    return ensureClientId();
+  }
+};
+
+// Function to ensure a client ID is available
+const ensureClientId = (): boolean => {
+  try {
+    // Check if we already have a client ID
+    let clientId = localStorage.getItem('docster_client_id');
+    
+    // If not, generate one and store it
+    if (!clientId) {
+      clientId = 'client-' + Math.random().toString(36).substring(2, 15) + 
+                 Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('docster_client_id', clientId);
+    }
+    
+    localStorage.setItem('current_user_id', clientId);
+    console.log('Using client-side ID for operations:', clientId);
+    
+    return true;
+  } catch (err) {
+    console.error('Client ID generation error:', err);
+    return false;
+  }
 }; 

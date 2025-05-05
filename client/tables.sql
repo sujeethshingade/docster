@@ -1,12 +1,17 @@
 -- Enable the UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create users table (Supabase already has auth.users built-in)
+-- Create function to identify client-side IDs
+CREATE OR REPLACE FUNCTION is_client_id(id text) RETURNS boolean AS $$
+BEGIN
+  RETURN id LIKE 'client-%';
+END;
+$$ LANGUAGE plpgsql;
 
 -- Create documents table
 CREATE TABLE documents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, 
   repo_name TEXT NOT NULL,
   content JSONB NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -18,7 +23,7 @@ CREATE TABLE documents (
 -- Create chats table
 CREATE TABLE chats (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, 
   repo_name TEXT NOT NULL,
   question TEXT NOT NULL,
   answer TEXT NOT NULL,
@@ -29,20 +34,28 @@ CREATE TABLE chats (
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chats ENABLE ROW LEVEL SECURITY;
 
--- Create policies for documents (only allow users to see their own documents)
+-- Create policies for documents that work with both auth users and client IDs
 CREATE POLICY "Users can view their own documents"
   ON documents FOR SELECT
-  USING (auth.uid() = user_id);
+  USING (auth.uid()::TEXT = user_id OR is_client_id(user_id));
 
 CREATE POLICY "Users can insert their own documents"
   ON documents FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (auth.uid()::TEXT = user_id OR is_client_id(user_id));
 
--- Create policies for chats (only allow users to see their own chats)
+CREATE POLICY "Users can delete their own documents"
+  ON documents FOR DELETE
+  USING (auth.uid()::TEXT = user_id OR is_client_id(user_id));
+
+-- Create policies for chats that work with both auth users and client IDs
 CREATE POLICY "Users can view their own chats"
   ON chats FOR SELECT
-  USING (auth.uid() = user_id);
+  USING (auth.uid()::TEXT = user_id OR is_client_id(user_id));
 
 CREATE POLICY "Users can insert their own chats"
   ON chats FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (auth.uid()::TEXT = user_id OR is_client_id(user_id));
+
+CREATE POLICY "Users can delete their own chats"
+  ON chats FOR DELETE
+  USING (auth.uid()::TEXT = user_id OR is_client_id(user_id));

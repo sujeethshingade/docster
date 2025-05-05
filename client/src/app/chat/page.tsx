@@ -24,6 +24,7 @@ function ChatContent() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const searchParams = useSearchParams();
     const repoParam = searchParams?.get('repo');
+    const [chatHistory, setChatHistory] = useState<any[]>([]);
 
     // Fetch repositories on mount
     useEffect(() => {
@@ -65,6 +66,45 @@ function ChatContent() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    useEffect(() => {
+        // Load chat history for this repository
+        const loadChatHistory = async () => {
+            if (selectedRepo) {
+                try {
+                    const data = await api.getChatsByRepository(selectedRepo);
+                    if (data.status === 'success' && data.chats) {
+                        console.log('Loaded chat history:', data.chats);
+                        setChatHistory(data.chats);
+
+                        // Initialize messages from history if available
+                        if (data.chats.length > 0) {
+                            const historyMessages = data.chats.flatMap((chat: any, index: number) => [
+                                {
+                                    id: `history-user-${index}`,
+                                    role: 'user' as const,
+                                    content: chat.question,
+                                    timestamp: new Date(chat.created_at).toISOString()
+                                },
+                                {
+                                    id: `history-assistant-${index}`,
+                                    role: 'assistant' as const,
+                                    content: chat.answer,
+                                    timestamp: new Date(chat.created_at).toISOString()
+                                }
+                            ]);
+                            setMessages(historyMessages);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading chat history:', error);
+                    // Don't show error to user, just load empty history
+                }
+            }
+        };
+
+        loadChatHistory();
+    }, [selectedRepo]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

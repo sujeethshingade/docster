@@ -85,10 +85,22 @@ export default function Navbar() {
                                 Documentation
                             </Link>
                             <Link
+                                href="/documentation/history"
+                                className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 cursor-pointer z-10"
+                            >
+                                Doc History
+                            </Link>
+                            <Link
                                 href="/chat"
                                 className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 cursor-pointer z-10"
                             >
                                 Chat
+                            </Link>
+                            <Link
+                                href="/chat/history"
+                                className="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 cursor-pointer z-10"
+                            >
+                                Chat History
                             </Link>
                         </div>
                     </div>
@@ -218,10 +230,22 @@ export default function Navbar() {
                         Documentation
                     </Link>
                     <Link
+                        href="/documentation/history"
+                        className="block border-l-4 border-transparent py-2 pl-3 pr-4 text-base font-medium text-gray-500 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700 cursor-pointer"
+                    >
+                        Doc History
+                    </Link>
+                    <Link
                         href="/chat"
                         className="block border-l-4 border-transparent py-2 pl-3 pr-4 text-base font-medium text-gray-500 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700 cursor-pointer"
                     >
                         Chat
+                    </Link>
+                    <Link
+                        href="/chat/history"
+                        className="block border-l-4 border-transparent py-2 pl-3 pr-4 text-base font-medium text-gray-500 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700 cursor-pointer"
+                    >
+                        Chat History
                     </Link>
                     {isAuthenticated && username ? (
                         <button
