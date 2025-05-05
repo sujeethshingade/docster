@@ -5,16 +5,21 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/services/api';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
+import { useAuth } from '@/contexts/AuthContext';
 
 function DocumentationContent() {
     const [documentation, setDocumentation] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [activeFile, setActiveFile] = useState<string | null>(null);
-
     const searchParams = useSearchParams();
     const repoName = searchParams?.get('repo');
     const router = useRouter();
+    const { isAuthenticated, checkAuthStatus } = useAuth();
+
+    useEffect(() => {
+        checkAuthStatus();
+    }, [checkAuthStatus]);
 
     useEffect(() => {
         if (!repoName) {
@@ -24,6 +29,17 @@ function DocumentationContent() {
 
         const fetchDocumentation = async () => {
             try {
+                setIsLoading(true);
+
+                // Check token but don't disconnect if missing
+                const token = localStorage.getItem('github_token');
+                if (!token) {
+                    console.warn("Token missing in documentation view - redirecting to connect");
+                    // Redirect to GitHub connect page instead of showing error
+                    router.push('/github/connect');
+                    return;
+                }
+
                 const data = await api.getDocumentation(repoName);
 
                 if (data.status === 'success') {
@@ -32,6 +48,12 @@ function DocumentationContent() {
                         setActiveFile(data.documentation.files[0].file_path);
                     }
                 } else {
+                    if (data.code === 401 || data.message?.includes('auth') || data.message?.includes('token')) {
+                        console.error('Auth error in documentation view:', data.message);
+                        router.push('/github/connect');
+                        return;
+                    }
+
                     setError(data.message || 'Failed to load documentation');
                 }
             } catch (error) {
@@ -49,6 +71,13 @@ function DocumentationContent() {
         if (!repoName) return;
 
         try {
+            const token = localStorage.getItem('github_token');
+            if (!token) {
+                console.warn("Token missing during export - redirecting");
+                router.push('/github/connect');
+                return;
+            }
+
             await api.exportDocumentation(repoName, format);
         } catch (error) {
             console.error(`Error exporting to ${format}:`, error);
@@ -74,13 +103,12 @@ function DocumentationContent() {
                         <div className="mt-6 rounded-md bg-red-50 p-4">
                             <div className="flex">
                                 <div className="flex-shrink-0">
-                                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
                                     </svg>
                                 </div>
                                 <div className="ml-3">
-                                    <h3 className="text-sm font-medium text-red-800">Error</h3>
-                                    <div className="mt-2 text-sm text-red-700">
+                                    <div className="text-sm text-red-500">
                                         <p>{error}</p>
                                     </div>
                                 </div>

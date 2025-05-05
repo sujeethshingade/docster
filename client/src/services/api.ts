@@ -8,33 +8,35 @@ export const isAuthenticated = async (): Promise<boolean> => {
     const userAuthFlag = localStorage.getItem('user_authenticated') === 'true';
     const hasGithubToken = localStorage.getItem('github_token') !== null;
     
-    // If we have a GitHub token but not authenticated with Supabase yet,
-    // give a bit more time for Supabase auth to complete
     if (hasGithubToken && !userAuthFlag) {
-      // Set the flag anyway since we have a token
       localStorage.setItem('user_authenticated', 'true');
     }
     
-    // First check Supabase auth
-    const { data: { user } } = await supabase.auth.getUser();
+    if (!hasGithubToken) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          updateAuthState(true);
+          return true;
+        }
+      } catch (err) {
+        console.error('Supabase auth check error:', err);
+      }
+    }
     
-    // If we have a GitHub token but no Supabase user yet, consider authenticated 
-    // (the Supabase user will be created shortly)
-    const isAuth = (!!user && hasGithubToken) || (hasGithubToken && userAuthFlag);
+    // If GitHub token exists, consider authenticated regardless of Supabase state
+    if (hasGithubToken) {
+      return true;
+    }
     
-    // Update localStorage to match the real auth state
-    updateAuthState(isAuth);
-    
-    return isAuth;
+    updateAuthState(false);
+    return false;
   } catch (err) {
     console.error('Auth check error:', err);
     
-    // Fall back to checking local storage as a last resort
     const hasGithubToken = localStorage.getItem('github_token') !== null;
-    const userAuthFlag = localStorage.getItem('user_authenticated') === 'true';
     
-    // If we have both indicators, consider authenticated despite the error
-    if (hasGithubToken && userAuthFlag) {
+    if (hasGithubToken) {
       return true;
     }
     
@@ -63,16 +65,17 @@ export const notifyAuthChange = () => {
 
 export const updateAuthState = (isAuthenticated: boolean) => {
   if (typeof window !== 'undefined') {
-    if (isAuthenticated) {
-      localStorage.setItem('user_authenticated', 'true');
-    } else {
-      localStorage.removeItem('user_authenticated');
-      localStorage.removeItem('github_token'); // Also clear token to ensure consistency
-      localStorage.removeItem('github_username'); // Also clear username
+    try {
+      if (isAuthenticated) {
+        localStorage.setItem('user_authenticated', 'true');
+      } else {
+        localStorage.removeItem('user_authenticated');
+      }
+      
+      notifyAuthChange();
+    } catch (error) {
+      console.error('Error updating auth state:', error);
     }
-    
-    // Notify all components about the change
-    notifyAuthChange();
   }
 };
 
@@ -93,17 +96,77 @@ export const getCurrentUser = async () => {
   }
 };
 
+// Create an authenticated fetch wrapper
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  // Always get a fresh token for each request
+  const token = typeof window !== 'undefined' ? localStorage.getItem('github_token') : null;
+  
+  // Prepare headers with token
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...options.headers
+  };
+  
+  // Make the request with token included
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
+    
+    // Don't clear auth on 401 errors - let the component handle them
+    return response;
+  } catch (err) {
+    console.error('Request error:', err);
+    throw err;
+  }
+};
+
+// Replace getHeaders with our new approach
 const getHeaders = (): HeadersInit => {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
 
-  const token = getAuthToken();
+  // Get token directly from localStorage
+  const token = typeof window !== 'undefined' ? localStorage.getItem('github_token') : null;
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
   return headers;
+};
+
+// Wrap the API method that fetches repositories to never clear auth state
+export const getRepositoriesSafe = async () => {
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('github_token') : null;
+    if (!token) {
+      return { 
+        status: 'error', 
+        message: 'Authentication required. Please connect your GitHub account.'
+      };
+    }
+
+    const response = await authenticatedFetch(`${API_URL}/github/repositories`);
+    
+    if (!response.ok) {
+      console.error(`Error fetching repositories: ${response.status}`);
+      return { 
+        status: 'error',
+        message: 'Failed to fetch repositories. Please try again.'
+      };
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching repositories:', error);
+    return { 
+      status: 'error', 
+      message: 'Failed to fetch repositories. Please try again.'
+    };
+  }
 };
 
 export const api = {
@@ -127,11 +190,9 @@ export const api = {
       }
       
       if (data.status === 'success' && data.token) {
-        // Store the token
         localStorage.setItem('github_token', data.token);
         localStorage.setItem('user_authenticated', 'true');
         
-        // Update auth state
         updateAuthState(true);
         
         // Create or update user in Supabase
@@ -169,7 +230,6 @@ export const api = {
           }
         }
         
-        // Notify all components about auth change
         notifyAuthChange();
       }
       
@@ -202,10 +262,7 @@ export const api = {
         headers: getHeaders(),
       });
       
-      // Clear local storage token regardless of response
       updateAuthState(false);
-      
-      // Sign out from Supabase
       await supabase.auth.signOut();
       
       return response.json();
@@ -217,33 +274,7 @@ export const api = {
   },
 
   getRepositories: async () => {
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        return { 
-          status: 'error', 
-          message: 'Authentication required. Please connect your GitHub account.'
-        };
-      }
-
-      const response = await fetch(`${API_URL}/github/repositories`, {
-        headers: getHeaders(),
-      });
-      const data = await response.json();
-      
-      // If we get an unauthorized error, clear auth state
-      if (data.status === 'error' && (data.code === 401 || data.message?.includes('unauthorized'))) {
-        updateAuthState(false);
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error fetching repositories:', error);
-      return { 
-        status: 'error', 
-        message: 'Failed to fetch repositories. Please try again.' 
-      };
-    }
+    return getRepositoriesSafe();
   },
 
   getRepository: async (repoName: string) => {
@@ -279,30 +310,63 @@ export const api = {
   },
 
   getDocumentation: async (repoName: string) => {
+    // Check if token exists first
+    const token = typeof window !== 'undefined' ? localStorage.getItem('github_token') : null;
+    if (!token) {
+      console.warn('No token available for getDocumentation');
+      return { 
+        status: 'error', 
+        code: 401,
+        message: 'Authentication required. Please connect your GitHub account.' 
+      };
+    }
+
     // First try to get from Supabase database
-    const user = await getCurrentUser();
-    if (user) {
-      const { data } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('repo_name', repoName)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      if (data && data.length > 0) {
-        return { 
-          status: 'success', 
-          documentation: JSON.parse(data[0].content) 
-        };
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        const { data } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('repo_name', repoName)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (data && data.length > 0) {
+          return { 
+            status: 'success', 
+            documentation: JSON.parse(data[0].content) 
+          };
+        }
       }
+    } catch (err) {
+      console.error('Error fetching from Supabase:', err);
+      // Continue to API fallback
     }
     
     // Fall back to API if not in database
-    const response = await fetch(`${API_URL}/documentation/get/${repoName}`, {
-      headers: getHeaders(),
-    });
-    return response.json();
+    try {
+      console.log('Fetching documentation with token:', token ? 'yes' : 'no');
+      const response = await authenticatedFetch(`${API_URL}/documentation/get/${repoName}`);
+      
+      if (!response.ok) {
+        console.error(`Documentation API error: ${response.status} ${response.statusText}`);
+        // Never clear auth state on API errors
+        return { 
+          status: 'error', 
+          code: response.status,
+          message: response.status === 401 ? 'Authentication required. Please reconnect to GitHub.' : 'Failed to fetch documentation' 
+        };
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error('Error fetching documentation:', err);
+      // Never clear auth state on errors
+      return { status: 'error', message: 'Failed to fetch documentation' };
+    }
   },
 
   getUserDocumentations: async () => {
@@ -345,7 +409,7 @@ export const api = {
   },
 
   exportDocumentation: async (repoName: string, format: 'pdf' | 'docx') => {
-    const token = getAuthToken();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('github_token') : null;
     
     try {
       if (typeof window !== 'undefined') {

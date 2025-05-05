@@ -26,6 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const checkAuthStatus = async (): Promise<boolean> => {
         try {
+            // Get token directly from localStorage
             const token = localStorage.getItem('github_token');
             if (!token) {
                 setIsAuthenticated(false);
@@ -34,16 +35,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return false;
             }
 
+            setIsAuthenticated(true);
+
             // Check if we have a username in localStorage
             const storedUsername = localStorage.getItem('github_username');
             if (storedUsername) {
                 setUsername(storedUsername);
-                setIsAuthenticated(true);
                 setLoading(false);
                 return true;
             }
 
-            // If no username, try to fetch it from API
+            // If no username but we have a token, try to fetch it
             try {
                 const response = await fetch(`${API_URL}/github/user`, {
                     headers: {
@@ -57,24 +59,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         const username = data.user.login;
                         setUsername(username);
                         localStorage.setItem('github_username', username);
-                        setIsAuthenticated(true);
                         setLoading(false);
                         return true;
                     }
                 }
+
+                // Even if API call fails, still remain authenticated if we have a token
+                setLoading(false);
+                return true;
             } catch (err) {
                 console.error('Failed to fetch user info:', err);
+                // Keep authenticated status regardless of API errors
+                setLoading(false);
+                return true;
             }
-
-            // Default fallback if we couldn't get username but have token
-            setIsAuthenticated(!!token);
-            setLoading(false);
-            return !!token;
         } catch (err) {
             console.error('Auth check error:', err);
-            setIsAuthenticated(false);
+            // Keep user authenticated if we have a token, even if there's an error
+            const hasToken = !!localStorage.getItem('github_token');
+            setIsAuthenticated(hasToken);
             setLoading(false);
-            return false;
+            return hasToken;
         }
     };
 

@@ -37,12 +37,9 @@ export default function Hero() {
           <div className="mx-auto max-w-2xl lg:text-center">
             <h2 className="text-base font-semibold leading-7 text-indigo-600">Effortless Documentation</h2>
             <p className="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Everything you need for perfect documentation</p>
-            <p className="mt-6 text-lg leading-8 text-gray-600">
-              Docster helps you create, maintain, and interact with high-quality documentation with the power of AI.
-            </p>
           </div>
 
-          <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-4xl">
+          <div className="mx-auto mt-12 max-w-2xl sm:mt-16 lg:mt-20 lg:max-w-4xl">
             <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-10 lg:max-w-none lg:grid-cols-2 lg:gap-y-16">
               <div className="relative pl-16">
                 <dt className="text-base font-semibold leading-7 text-gray-900">

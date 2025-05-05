@@ -42,15 +42,19 @@ export default function Navbar() {
 
     const handleDisconnect = async () => {
         try {
-            localStorage.removeItem('github_token');
+            console.log('User explicitly disconnecting from GitHub');
+
             localStorage.removeItem('user_authenticated');
             localStorage.removeItem('github_username');
+            localStorage.removeItem('github_token');
 
             updateAuthState(false);
-
             await checkAuthStatus();
-
             router.push('/');
+
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 100);
         } catch (err) {
             console.error('Error disconnecting from GitHub:', err);
             // Even if there's an error, try to clean up local state

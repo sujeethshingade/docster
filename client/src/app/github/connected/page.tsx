@@ -22,44 +22,71 @@ function GitHubConnectedContent() {
             return;
         }
 
-        localStorage.setItem('github_token', token);
-        localStorage.setItem('user_authenticated', 'true');
+        try {
+            // Save token to localStorage with error handling
+            localStorage.removeItem('github_token'); 
+            localStorage.setItem('github_token', token);
+            console.log('GitHub token saved successfully');
 
-        if (username) {
-            localStorage.setItem('github_username', username);
-        }
+            // Set authentication state
+            localStorage.setItem('user_authenticated', 'true');
 
-        updateAuthState(true);
-        checkAuthStatus();
-        notifyAuthChange();
-
-        const fetchRepositories = async () => {
-            try {
-                const data = await api.getRepositories();
-
-                if (data.status === 'success') {
-                    setRepositories(data.repositories);
-                } else {
-                    setError(data.message || 'Failed to load repositories');
-                }
-            } catch (error) {
-                console.error('Error fetching repositories:', error);
-                setError('Failed to load repositories. Please try again later.');
-            } finally {
-                setIsLoading(false);
+            // Save username if available
+            if (username) {
+                localStorage.removeItem('github_username'); // Clear first
+                localStorage.setItem('github_username', username);
+                console.log('GitHub username saved successfully');
             }
-        };
 
-        fetchRepositories();
+            // Update global auth state
+            updateAuthState(true);
 
-        // Redirect to documentation after a short delay
-        const redirectTimeout = setTimeout(() => {
-            router.push('/documentation');
-        }, 3000);
+            // Force refresh auth context
+            checkAuthStatus().then(isAuth => {
+                console.log('Auth status checked:', isAuth);
 
-        return () => {
-            clearTimeout(redirectTimeout);
-        };
+                // Dispatch global event for all components to refresh auth
+                window.dispatchEvent(new Event('auth-change'));
+
+                // Also trigger storage event for components listening to storage changes
+                window.dispatchEvent(new StorageEvent('storage', {
+                    key: 'github_token',
+                    newValue: token
+                }));
+            });
+
+            const fetchRepositories = async () => {
+                try {
+                    const data = await api.getRepositories();
+
+                    if (data.status === 'success') {
+                        setRepositories(data.repositories);
+                    } else {
+                        setError(data.message || 'Failed to load repositories');
+                    }
+                } catch (error) {
+                    console.error('Error fetching repositories:', error);
+                    setError('Failed to load repositories. Please try again later.');
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            fetchRepositories();
+
+            // Redirect to documentation after a short delay
+            const redirectTimeout = setTimeout(() => {
+                router.push('/documentation');
+            }, 3000);
+
+            return () => {
+                clearTimeout(redirectTimeout);
+            };
+        } catch (error) {
+            console.error('Error setting authentication:', error);
+            setError('Failed to authenticate. Please try again.');
+            setIsLoading(false);
+        }
     }, [token, username, router, checkAuthStatus]);
 
     return (
