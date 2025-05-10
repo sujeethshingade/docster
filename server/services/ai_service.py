@@ -250,3 +250,92 @@ class AIService:
             self.logger.error(
                 f"Error answering question: {str(e)}", exc_info=True)
             return f"Error answering question: {str(e)}"
+
+    def generate_mermaid_diagram(self, code_analysis):
+        """Generate a Mermaid diagram based on code analysis"""
+        if not self.model:
+            return """```mermaid
+    flowchart LR
+        E[Error] -->|AI Service Not Available| M[Check API Key]
+    ```"""
+
+        try:
+            prompt = f"""
+            Generate a Mermaid flowchart diagram showing the system architecture. Follow these rules exactly:
+
+            1. Start with 'flowchart LR'
+            2. Use correct node styles:
+            - [Component Name] for services
+            - [(Database Name)] for databases
+            - {{External Service}} for external services
+            3. Connect nodes with arrows using -->
+            4. Add labels between pipes: A -->|label text| B
+            5. Group related components in subgraphs with proper indentation:
+            subgraph Group Name
+                A[Service] -->|action| B[Service]
+            end
+
+            Example of valid syntax:
+            flowchart LR
+                subgraph Backend
+                    A[API] -->|process| B[(Database)]
+                    B -->|fetch| C[Service]
+                end
+                subgraph Frontend
+                    D[UI] -->|request| A
+                end
+
+            Code Analysis:
+            {json.dumps(code_analysis, indent=2)}
+
+            Generate only valid Mermaid flowchart syntax without any explanations or markdown delimiters.
+            """
+            
+            def api_call():
+                return self.model.generate_content(prompt)
+                
+            response = self._retry_api_call(api_call)
+            diagram = response.text.strip()
+            
+            # Clean up the diagram
+            if "```" in diagram:
+                diagram = ''.join(
+                    line for line in diagram.splitlines()
+                    if not line.startswith("```") and not line.endswith("```")
+                ).strip()
+            
+            # Ensure proper start
+            if not diagram.startswith("flowchart"):
+                diagram = "flowchart LR\n" + diagram
+            
+            # Format with proper indentation and newlines
+            lines = diagram.splitlines()
+            formatted_lines = []
+            indent = "    "
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith("subgraph"):
+                    formatted_lines.append(line)
+                elif line == "end":
+                    formatted_lines.append(line)
+                else:
+                    formatted_lines.append(indent + line)
+            
+            diagram = '\n'.join(formatted_lines)
+            
+            # Basic validation
+            if not any(["-->" in diagram]):
+                raise ValueError("Generated diagram does not contain valid connections")
+            
+            final_diagram = f"```mermaid\n{diagram}\n```"
+            
+            self.logger.debug(f"Generated Mermaid diagram:\n{final_diagram}")
+            return final_diagram
+                
+        except Exception as e:
+            self.logger.error(f"Error generating Mermaid diagram: {str(e)}")
+            return """```mermaid
+    flowchart LR
+        E[Error] -->|Generation failed| M[Please try again]
+    ```"""

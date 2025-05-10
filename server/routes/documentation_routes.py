@@ -76,7 +76,7 @@ def generate():
             }), 404
 
         try:
-            documentation = documentation_service.generate_repository_documentation(
+            documentation = documentation_service.generate_documentation(
                 repo_name)
         except Exception as e:
             return jsonify({

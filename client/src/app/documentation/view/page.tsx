@@ -6,6 +6,7 @@ import { api } from '@/services/api';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '@/contexts/AuthContext';
+import Mermaid from '@/components/Mermaid';
 
 function DocumentationContent() {
     const [documentation, setDocumentation] = useState<any>(null);
@@ -243,6 +244,16 @@ function DocumentationContent() {
                         )}
                     </div>
                 </div>
+
+                {/* Add diagram section */}
+                {documentation.diagrams?.flow && (
+                    <div className="mt-8">
+                        <h3 className="text-lg font-medium text-gray-900">Flow Diagram</h3>
+                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                            <Mermaid chart={documentation.diagrams.flow} />
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -258,4 +269,4 @@ export default function ViewDocumentation() {
             <DocumentationContent />
         </Suspense>
     );
-} 
+}
