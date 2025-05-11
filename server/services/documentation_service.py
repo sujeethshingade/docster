@@ -126,6 +126,74 @@ class DocumentationService:
                 f"Error generating repository documentation: {str(e)}", exc_info=True)
             return None
 
+    def generate_documentation(self, repo_name):
+        """Generate documentation including Mermaid diagrams"""
+        try:
+            self.logger.info(
+                f"Starting documentation generation with diagrams for repository: {repo_name}")
+
+            self.logger.debug("Analyzing repository")
+            code_analysis = self.analyze_repository(repo_name)
+            self.logger.debug("Repository analysis completed")
+
+            self.logger.debug("Generating Mermaid diagram")
+            flow_diagram = self.ai_service.generate_mermaid_diagram(code_analysis)
+            self.logger.debug("Mermaid diagram generated")
+
+            documentation = self.generate_repository_documentation(repo_name)
+            documentation['diagrams'] = {
+                'flow': flow_diagram
+            }
+
+            self.logger.info(
+                f"Documentation with diagrams generation completed for {repo_name}")
+            return documentation
+        except Exception as e:
+            self.logger.error(
+                f"Error generating documentation with diagrams: {str(e)}", exc_info=True)
+            return None
+
+    def analyze_repository(self, repo_name):
+        """Analyze repository for diagram generation"""
+        try:
+            self.logger.debug(f"Analyzing repository structure: {repo_name}")
+            
+            # Get repository data
+            repo = self.github_service.get_repository(repo_name)
+            contents = self.github_service.get_repository_contents(repo_name)
+            
+            # Build file list for analysis
+            important_files = self._get_important_files(repo_name, contents)
+            
+            # Collect code content for analysis
+            code_analysis = []
+            for file_path in important_files:
+                try:
+                    file_content = self.github_service.get_repository_contents(repo_name, file_path)
+                    if not isinstance(file_content, list):  # Skip directories
+                        content = file_content.decoded_content.decode('utf-8')
+                        code_analysis.append({
+                            'file': file_path,
+                            'content': content
+                        })
+                except Exception as e:
+                    self.logger.warning(f"Error analyzing {file_path}: {str(e)}")
+                    continue
+            
+            # Create analysis summary
+            analysis_summary = {
+                'repository': repo.name,
+                'files': code_analysis,
+                'structure': self._build_repo_structure(repo_name, contents)
+            }
+            
+            self.logger.debug(f"Repository analysis completed for {repo_name}")
+            return analysis_summary
+            
+        except Exception as e:
+            self.logger.error(f"Error during repository analysis: {str(e)}", exc_info=True)
+            raise
+
     def _build_repo_structure(self, repo_name, contents, path=""):
         """Recursively build repository structure"""
         structure = []
@@ -235,6 +303,15 @@ class DocumentationService:
             md.append(f"### {file_doc['file_path']}")
             md.append("")
             md.append(file_doc['documentation'])
+            md.append("")
+
+        # Diagrams
+        if 'diagrams' in documentation:
+            md.append("## Diagrams")
+            md.append("")
+            md.append("### Flow Diagram")
+            md.append("")
+            md.append(f"```mermaid\n{documentation['diagrams']['flow']}\n```")
             md.append("")
 
         # Generation info
